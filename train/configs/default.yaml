@@ -1,0 +1,44 @@
+# NicheLM default training config.
+# Train on Spider, evaluate on the held-out e-commerce schema.
+# All paths are relative to the repo root.
+
+base_model: unsloth/Llama-3.2-3B-Instruct
+max_seq_length: 4096          # Spider DDL can be long; 4k gives headroom.
+load_in_4bit: true
+
+dataset:
+  train: data/processed/train.jsonl
+  validation: data/processed/val.jsonl
+
+lora:
+  r: 16
+  alpha: 32
+  dropout: 0.0
+  target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+    - gate_proj
+    - up_proj
+    - down_proj
+
+training:
+  per_device_train_batch_size: 4
+  gradient_accumulation_steps: 4
+  num_train_epochs: 2
+  learning_rate: 2.0e-4
+  warmup_ratio: 0.03
+  bf16: true
+  logging_steps: 10
+  save_strategy: epoch
+  eval_strategy: epoch
+  output_dir: outputs
+  optim: adamw_8bit
+  lr_scheduler_type: cosine
+  weight_decay: 0.0
+  seed: 42
+
+reporting:
+  report_to: wandb
+  run_name: nichelm-v1

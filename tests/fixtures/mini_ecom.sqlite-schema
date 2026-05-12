@@ -1,0 +1,26 @@
+-- Trimmed CREATE TABLE statements used by `data/quality_check.py --fixture`.
+-- Three tables, no data — the QC only needs to confirm SQL parses against
+-- the schema. SELECTs against empty tables return zero rows, which is fine.
+
+PRAGMA foreign_keys = ON;
+
+CREATE TABLE customers (
+    id      INTEGER PRIMARY KEY,
+    name    TEXT NOT NULL,
+    email   TEXT NOT NULL UNIQUE,
+    country TEXT NOT NULL
+);
+
+CREATE TABLE products (
+    id    INTEGER PRIMARY KEY,
+    name  TEXT NOT NULL,
+    price REAL NOT NULL
+);
+
+CREATE TABLE orders (
+    id          INTEGER PRIMARY KEY,
+    customer_id INTEGER NOT NULL REFERENCES customers(id),
+    order_date  TEXT NOT NULL,
+    status      TEXT NOT NULL,
+    total       REAL NOT NULL
+);

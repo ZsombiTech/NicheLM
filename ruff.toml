@@ -1,0 +1,30 @@
+target-version = "py311"
+line-length = 100
+extend-exclude = ["notebooks", "outputs", "data/processed", ".hf_cache"]
+
+[lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "N",    # pep8-naming
+    "UP",   # pyupgrade
+    "B",    # flake8-bugbear
+    "SIM",  # flake8-simplify
+    "RUF",  # ruff-specific
+    "TID",  # tidy imports
+]
+ignore = [
+    "E501",   # line length (handled by formatter)
+    "B008",   # function call in default argument (FastAPI uses this)
+]
+
+[lint.per-file-ignores]
+"tests/**" = ["B011", "N802"]
+"**/__init__.py" = ["F401"]
+
+[format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"

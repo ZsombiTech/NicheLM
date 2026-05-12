@@ -1,0 +1,57 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual envs / uv
+.venv/
+.python-version-local
+
+# Secrets / local config
+.env
+.env.local
+
+# Build / training outputs
+outputs/
+wandb/
+checkpoints/
+*.gguf
+*.bin
+*.safetensors
+
+# Cached datasets (Spider lands here when HF caches per-DB SQLite files)
+.hf_cache/
+
+# Generated data — keep raw schema, ignore everything heavy
+data/processed/*.sqlite
+data/processed/*.jsonl
+data/raw/*
+
+# Eval response cache
+eval/results/.cache/
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*~
+
+# OS cruft
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Jupyter
+.ipynb_checkpoints/
+notebooks/*.ipynb
+
+# Don't ignore .gitkeep markers
+!**/.gitkeep

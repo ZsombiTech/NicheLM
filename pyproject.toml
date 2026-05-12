@@ -1,0 +1,68 @@
+[project]
+name = "nichelm"
+version = "0.1.0"
+description = "Fine-tuned 3B text-to-SQL model trained on Spider, evaluated on a held-out e-commerce schema."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "NicheLM" }]
+
+dependencies = [
+    "pydantic>=2.7",
+    "pyyaml>=6.0",
+    "python-dotenv>=1.0",
+    "faker>=25.0",
+    "tqdm>=4.66",
+    "rich>=13.7",
+    "numpy>=1.26",
+    "sqlglot>=23.0",
+]
+
+[project.optional-dependencies]
+data = [
+    "datasets>=2.20",
+]
+eval = [
+    "anthropic>=0.40",
+    "transformers>=4.45",
+    "torch>=2.4",
+    "accelerate>=0.30",
+]
+train = [
+    "unsloth>=2024.10",
+    "trl>=0.10",
+    "peft>=0.11",
+    "bitsandbytes>=0.43",
+    "wandb>=0.17",
+    "datasets>=2.20",
+]
+serve = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.30",
+    "transformers>=4.45",
+    "torch>=2.4",
+]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "ruff>=0.6",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["data", "eval", "train", "serve"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]
+
+[tool.coverage.run]
+source = ["data", "eval", "train", "serve"]
+omit = ["**/__init__.py"]

@@ -147,6 +147,10 @@ def main() -> None:
         "max_length": cfg.max_seq_length,
         "dataset_text_field": "text",
         "packing": False,
+        # Force single-process dataset prep. Multiprocessing tries to pickle
+        # the tokenization closure, which captures torch._dynamo's
+        # ConfigModuleInstance and crashes with "cannot pickle".
+        "dataset_num_proc": 1,
         # trl >= 0.18 added an `eos_token` field whose default is the literal
         # placeholder '<EOS_TOKEN>'. SFTTrainer then validates that string
         # against the tokenizer vocab and crashes. Pin it to the real EOS.

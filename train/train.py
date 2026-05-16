@@ -182,6 +182,7 @@ def main() -> None:
     tokenizer.model_max_length = cfg.max_seq_length
 
     trainer_params = set(inspect.signature(SFTTrainer.__init__).parameters)
+    log.info("SFTTrainer accepts params: %s", sorted(trainer_params))
     trainer_kwargs: dict[str, Any] = {
         "model": model,
         "train_dataset": ds_train,
@@ -193,6 +194,14 @@ def main() -> None:
         trainer_kwargs["processing_class"] = tokenizer
     elif "tokenizer" in trainer_params:
         trainer_kwargs["tokenizer"] = tokenizer
+    # trl >= 0.22 lifted `eos_token` into SFTTrainer's own __init__ with a
+    # placeholder default that shadows whatever lives on `args`. Pass the real
+    # EOS through whichever kwarg the installed version exposes.
+    for eos_kwarg in ("eos_token", "eos_token_id"):
+        if eos_kwarg in trainer_params:
+            trainer_kwargs[eos_kwarg] = (
+                real_eos if eos_kwarg == "eos_token" else tokenizer.eos_token_id
+            )
     trainer = SFTTrainer(**trainer_kwargs)
 
     log.info("training …")

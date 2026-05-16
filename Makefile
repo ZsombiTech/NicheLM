@@ -1,4 +1,4 @@
-.PHONY: install install-all seed dataset-train dataset-eval dataset qc baselines baselines-smoke inspect test lint format ci clean
+.PHONY: install install-all seed dataset-train dataset-eval dataset qc baselines baselines-smoke train eval inspect test lint format ci clean
 
 # Default args; override on the command line, e.g. `make qc QC_ARGS='--fixture'`.
 SEED ?= 42
@@ -9,6 +9,11 @@ SAMPLE ?= 5
 # while iterating; bump to 500 for the final published number:
 #   make baselines BASELINE_LIMIT=500
 BASELINE_LIMIT ?= 20
+
+# Training / eval knobs.
+TRAIN_CONFIG ?= train/configs/default.yaml
+CHECKPOINT   ?= outputs/nichelm-v1/final
+EVAL_LIMIT   ?= 500
 
 install:
 	uv sync --extra dev
@@ -51,6 +56,22 @@ baselines-smoke:
 	  --db data/processed/ecom.sqlite \
 	  --out eval/results/baselines.smoke.md \
 	  --limit 5 --no-cache
+
+# GPU-only: QLoRA fine-tune of Llama 3.2 3B on the Spider train set.
+# Requires `uv sync --extra train` and a CUDA device (~24 GB VRAM).
+train:
+	uv run python -m train.train --config $(TRAIN_CONFIG)
+
+# Evaluate a tuned checkpoint on the held-out e-commerce test set.
+# Override with `make eval CHECKPOINT=path/to/ckpt EVAL_LIMIT=20`.
+eval:
+	uv run python -m eval.run_eval \
+	  --checkpoint $(CHECKPOINT) \
+	  --test data/processed/test.jsonl \
+	  --db data/processed/ecom.sqlite \
+	  --out-csv eval/results/tuned.csv \
+	  --out-md eval/results/tuned.md \
+	  --limit $(EVAL_LIMIT)
 
 inspect:
 	uv run python -m data.inspect $(FILE) --sample $(SAMPLE)

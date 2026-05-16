@@ -4,12 +4,12 @@ NicheLM is a fine-tuned **Llama 3.2 3B Instruct** that takes a SQL schema and a 
 
 ## Headline metrics
 
-To be filled after the first training run. The harness already produces this table from `make baselines` / `make eval`.
+Baselines below are from `make baselines` on a 20-row slice of the held-out e-commerce test set. The `nichelm-v1` row will be filled in after the first training run; the full 500-row sweep will be re-run against all three models for the final published number.
 
 | model              | exec_acc | exact | valid_sql | mean_latency_s | mean_cost_usd | n   |
 |--------------------|----------|-------|-----------|----------------|---------------|-----|
-| claude-haiku-4-5   | TBD      | TBD   | TBD       | TBD            | TBD           | 500 |
-| llama-3.2-3b-base  | TBD      | TBD   | TBD       | TBD            | TBD           | 500 |
+| claude-haiku-4-5   | 0.850    | 0.500 | 1.000     | 0.874          | 0.000602      | 20  |
+| llama-3.2-3b-base  | 0.650    | 0.350 | 0.900     | 2.714          | 0.000000      | 20  |
 | **nichelm-v1**     | **TBD**  | TBD   | TBD       | TBD            | TBD           | 500 |
 
 ## Schema (held-out evaluation harness)
@@ -107,10 +107,10 @@ The synthetic e-commerce test set is generated locally and **never overlaps** wi
 ## Project status
 
 - [x] Repo scaffold (CI green: lint + tests + fixture quality check)
-- [ ] Synthetic e-commerce DB seeded
-- [ ] Spider train/val JSONL built
-- [ ] E-commerce 500-question test set built
-- [ ] Baselines run (Claude Haiku 4.5, raw Llama 3.2 3B)
+- [x] Synthetic e-commerce DB seeded
+- [x] Spider train/val JSONL built
+- [x] E-commerce 500-question test set built
+- [x] Baselines run (Claude Haiku 4.5, raw Llama 3.2 3B)
 - [ ] First training run (Unsloth QLoRA on rented GPU)
 - [ ] Ablations: dataset size, LoRA rank, schema-format
 - [ ] Quantization (GGUF / llama.cpp export, Ollama Modelfile finalized)
@@ -149,11 +149,13 @@ make qc
 make baselines
 ```
 
-Training runs on a rented GPU (24 GB+):
+Training and tuned-model eval run on a rented GPU (24 GB+):
 
 ```bash
 uv sync --extra train
-uv run python -m train.train --config train/configs/default.yaml
+make train                                 # QLoRA fine-tune, writes outputs/nichelm-v1/final/
+make eval                                  # runs the checkpoint over test.jsonl
+                                           #   override target with: make eval CHECKPOINT=outputs/my-run/final
 ```
 
 ## Limitations

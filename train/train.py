@@ -155,6 +155,14 @@ def main() -> None:
     sft_params = set(inspect.signature(SFTConfig.__init__).parameters)
     sft_cfg = SFTConfig(**{k: v for k, v in candidate_kwargs.items() if k in sft_params})
 
+    # trl >= 0.18 ships SFTConfig with an `eos_token` field whose default is the
+    # literal placeholder '<EOS_TOKEN>'. SFTTrainer then validates that string
+    # against the tokenizer vocab and crashes. The field isn't exposed via
+    # __init__'s signature in every version, so the candidate-kwargs filter
+    # above may drop it — set it explicitly after construction.
+    if hasattr(sft_cfg, "eos_token"):
+        sft_cfg.eos_token = tokenizer.eos_token
+
     # Belt-and-suspenders for trl versions that dropped max_seq_length from
     # SFTConfig: pin the tokenizer's max length so the trainer respects it.
     tokenizer.model_max_length = cfg.max_seq_length

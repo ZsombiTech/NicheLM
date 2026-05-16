@@ -147,6 +147,10 @@ def main() -> None:
         "max_length": cfg.max_seq_length,
         "dataset_text_field": "text",
         "packing": False,
+        # trl >= 0.18 added an `eos_token` field whose default is the literal
+        # placeholder '<EOS_TOKEN>'. SFTTrainer then validates that string
+        # against the tokenizer vocab and crashes. Pin it to the real EOS.
+        "eos_token": tokenizer.eos_token,
     }
     sft_params = set(inspect.signature(SFTConfig.__init__).parameters)
     sft_cfg = SFTConfig(**{k: v for k, v in candidate_kwargs.items() if k in sft_params})

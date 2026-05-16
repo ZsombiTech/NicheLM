@@ -14,6 +14,7 @@ Usage (on a rented GPU):
 from __future__ import annotations
 
 import argparse
+import inspect
 import logging
 import os
 from dataclasses import dataclass
@@ -119,36 +120,54 @@ def main() -> None:
         log.warning("WANDB_API_KEY not set; falling back to report_to='none'")
         report_to = "none"
 
-    sft_cfg = SFTConfig(
-        per_device_train_batch_size=int(cfg.training["per_device_train_batch_size"]),
-        gradient_accumulation_steps=int(cfg.training["gradient_accumulation_steps"]),
-        num_train_epochs=int(cfg.training["num_train_epochs"]),
-        learning_rate=float(cfg.training["learning_rate"]),
-        warmup_ratio=float(cfg.training["warmup_ratio"]),
-        bf16=bool(cfg.training.get("bf16", True)) and is_bfloat16_supported(),
-        fp16=not (bool(cfg.training.get("bf16", True)) and is_bfloat16_supported()),
-        logging_steps=int(cfg.training.get("logging_steps", 10)),
-        save_strategy=str(cfg.training.get("save_strategy", "epoch")),
-        eval_strategy=str(cfg.training.get("eval_strategy", "epoch")),
-        output_dir=str(Path(cfg.training["output_dir"]) / run_name),
-        optim=str(cfg.training.get("optim", "adamw_8bit")),
-        lr_scheduler_type=str(cfg.training.get("lr_scheduler_type", "cosine")),
-        weight_decay=float(cfg.training.get("weight_decay", 0.0)),
-        seed=seed,
-        report_to=report_to,
-        run_name=run_name,
-        max_seq_length=cfg.max_seq_length,
-        dataset_text_field="text",
-        packing=False,
-    )
+    # `trl` has churned through several incompatible SFTConfig signatures.
+    # Build the candidate kwargs and filter against the installed version's
+    # signature so the script survives version drift.
+    candidate_kwargs: dict[str, Any] = {
+        "per_device_train_batch_size": int(cfg.training["per_device_train_batch_size"]),
+        "gradient_accumulation_steps": int(cfg.training["gradient_accumulation_steps"]),
+        "num_train_epochs": int(cfg.training["num_train_epochs"]),
+        "learning_rate": float(cfg.training["learning_rate"]),
+        "warmup_ratio": float(cfg.training["warmup_ratio"]),
+        "bf16": bool(cfg.training.get("bf16", True)) and is_bfloat16_supported(),
+        "fp16": not (bool(cfg.training.get("bf16", True)) and is_bfloat16_supported()),
+        "logging_steps": int(cfg.training.get("logging_steps", 10)),
+        "save_strategy": str(cfg.training.get("save_strategy", "epoch")),
+        "eval_strategy": str(cfg.training.get("eval_strategy", "epoch")),
+        "output_dir": str(Path(cfg.training["output_dir"]) / run_name),
+        "optim": str(cfg.training.get("optim", "adamw_8bit")),
+        "lr_scheduler_type": str(cfg.training.get("lr_scheduler_type", "cosine")),
+        "weight_decay": float(cfg.training.get("weight_decay", 0.0)),
+        "seed": seed,
+        "report_to": report_to,
+        "run_name": run_name,
+        # Version-dependent — both old and new names included; only valid ones
+        # survive the signature filter below.
+        "max_seq_length": cfg.max_seq_length,
+        "max_length": cfg.max_seq_length,
+        "dataset_text_field": "text",
+        "packing": False,
+    }
+    sft_params = set(inspect.signature(SFTConfig.__init__).parameters)
+    sft_cfg = SFTConfig(**{k: v for k, v in candidate_kwargs.items() if k in sft_params})
 
-    trainer = SFTTrainer(
-        model=model,
-        tokenizer=tokenizer,
-        train_dataset=ds_train,
-        eval_dataset=ds_val,
-        args=sft_cfg,
-    )
+    # Belt-and-suspenders for trl versions that dropped max_seq_length from
+    # SFTConfig: pin the tokenizer's max length so the trainer respects it.
+    tokenizer.model_max_length = cfg.max_seq_length
+
+    trainer_params = set(inspect.signature(SFTTrainer.__init__).parameters)
+    trainer_kwargs: dict[str, Any] = {
+        "model": model,
+        "train_dataset": ds_train,
+        "eval_dataset": ds_val,
+        "args": sft_cfg,
+    }
+    # trl >= 0.12 renamed `tokenizer=` to `processing_class=`; pass whichever exists.
+    if "processing_class" in trainer_params:
+        trainer_kwargs["processing_class"] = tokenizer
+    elif "tokenizer" in trainer_params:
+        trainer_kwargs["tokenizer"] = tokenizer
+    trainer = SFTTrainer(**trainer_kwargs)
 
     log.info("training …")
     trainer.train()

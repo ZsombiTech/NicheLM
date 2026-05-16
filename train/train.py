@@ -57,6 +57,9 @@ def main() -> None:
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
     )
+    from dotenv import load_dotenv
+
+    load_dotenv()  # picks up WANDB_API_KEY / HF_TOKEN from .env
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, default=Path("train/configs/default.yaml"))
     parser.add_argument(

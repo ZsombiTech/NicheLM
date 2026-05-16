@@ -72,12 +72,20 @@ def _execute_against(db: sqlite3.Connection, sql: str) -> str | None:
 def _check_train_test_overlap(
     train: Iterable[dict[str, Any]], test: Iterable[dict[str, Any]]
 ) -> list[str]:
-    test_questions = {r["messages"][1]["content"] for r in test if "messages" in r}
-    train_questions = {r["messages"][1]["content"] for r in train if "messages" in r}
-    overlap = train_questions & test_questions
+    # A row is a leak only if it shares BOTH db_id and question with a test row
+    # — same English against a different schema isn't memorization, since the
+    # schema is part of the prompt the model sees.
+    def _key(r: dict[str, Any]) -> tuple[str, str] | None:
+        if "messages" not in r:
+            return None
+        return (r.get("db_id", ""), r["messages"][1]["content"])
+
+    test_keys = {k for k in (_key(r) for r in test) if k is not None}
+    train_keys = {k for k in (_key(r) for r in train) if k is not None}
+    overlap = train_keys & test_keys
     if overlap:
         sample = list(overlap)[:5]
-        return [f"train/test exact-question overlap: {len(overlap)} (e.g. {sample})"]
+        return [f"train/test (db_id, question) overlap: {len(overlap)} (e.g. {sample})"]
     return []
 
 

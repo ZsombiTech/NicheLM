@@ -10,7 +10,7 @@ param(
         'install', 'install-all',
         'seed',
         'dataset-train', 'dataset-eval', 'dataset',
-        'qc', 'baselines',
+        'qc', 'baselines', 'baselines-smoke', 'inspect',
         'test', 'lint', 'format',
         'ci', 'clean',
         'help'
@@ -18,7 +18,13 @@ param(
     [string]$Target = 'help',
 
     [int]$Seed = 42,
-    [string]$QcArgs = ''
+    [string]$QcArgs = '',
+    [string]$InspectFile = '',
+    [int]$Sample = 5,
+    # How many test prompts the `baselines` target sends to each model.
+    # Default 20 keeps cost low (~$0.04 on Claude Haiku); bump to 500 for the
+    # final published number:  .\make.ps1 baselines -BaselineLimit 500
+    [int]$BaselineLimit = 20
 )
 
 $ErrorActionPreference = 'Stop'
@@ -62,10 +68,25 @@ switch ($Target) {
     }
     'baselines' {
         Invoke-Uv run python -m eval.run_baselines `
-            --models claude-haiku-4-5,llama-3.2-3b-base `
+            --models 'claude-haiku-4-5,llama-3.2-3b-base' `
             --test data/processed/test.jsonl `
             --db data/processed/ecom.sqlite `
-            --out eval/results/baselines.md
+            --out eval/results/baselines.md `
+            --limit $BaselineLimit
+    }
+    'baselines-smoke' {
+        Invoke-Uv run python -m eval.run_baselines `
+            --models claude-haiku-4-5 `
+            --test data/processed/test.jsonl `
+            --db data/processed/ecom.sqlite `
+            --out eval/results/baselines.smoke.md `
+            --limit 5 --no-cache
+    }
+    'inspect' {
+        if (-not $InspectFile) {
+            throw "Pass -InspectFile <path>, e.g. .\make.ps1 inspect -InspectFile data/processed/test.jsonl"
+        }
+        Invoke-Uv run python -m data.inspect $InspectFile --sample $Sample
     }
     'test'   { Invoke-Uv run pytest }
     'lint' {
@@ -98,7 +119,9 @@ NicheLM PowerShell wrapper. Targets:
   dataset-train   build train.jsonl + val.jsonl from Spider (needs `data` extra)
   dataset         dataset-eval + dataset-train
   qc              run the data quality check
-  baselines       run Claude Haiku + raw Llama 3.2 baselines
+  baselines       run Claude Haiku + raw Llama 3.2 baselines (default 20 prompts)
+  baselines-smoke 5-prompt Claude-only smoke run to verify wiring
+  inspect         summarize a JSONL: counts, distributions, samples
   test            pytest
   lint            ruff check + format check
   format          auto-fix lint + auto-format
@@ -106,10 +129,15 @@ NicheLM PowerShell wrapper. Targets:
   clean           remove generated data, caches, training outputs
 
 Flags:
-  -Seed <int>     RNG seed for seed/dataset (default 42)
-  -QcArgs '...'   extra args forwarded to quality_check (e.g. -QcArgs '--fixture')
+  -Seed <int>            RNG seed for seed/dataset (default 42)
+  -QcArgs '...'          extra args forwarded to quality_check (e.g. -QcArgs '--fixture')
+  -InspectFile <path>    JSONL to inspect (required by `inspect` target)
+  -Sample <int>          how many random rows `inspect` should print (default 5)
+  -BaselineLimit <int>   how many test prompts `baselines` sends (default 20)
 
-Example:  .\make.ps1 ci
+Examples:
+  .\make.ps1 ci
+  .\make.ps1 inspect -InspectFile data/processed/test.jsonl -Sample 10
 "@
     }
 }

@@ -67,6 +67,65 @@ def _row_to_spider(item: dict[str, Any]) -> SpiderRow:
     )
 
 
+def _find_spider_db_dir(hf_cache_dir: Path) -> Path | None:
+    """Walk the HF cache for a directory that looks like Spider's per-DB SQLite tree.
+
+    Spider's archive extracts to `<some_path>/database/<db_id>/<db_id>.sqlite`.
+    We look for any `database/` folder that has at least one
+    `<name>/<name>.sqlite` child and return its path; `None` if not found.
+    """
+    if not hf_cache_dir.exists():
+        return None
+    for candidate in hf_cache_dir.rglob("database"):
+        if not candidate.is_dir():
+            continue
+        for child in candidate.iterdir():
+            if child.is_dir() and (child / f"{child.name}.sqlite").exists():
+                return candidate
+    return None
+
+
+def _ensure_spider_databases(cache_dir: Path) -> Path:
+    """Download and extract Spider's per-DB SQLite files.
+
+    The `xlangai/spider` HF dataset is parquet-only (text data); the per-DB
+    SQLite files are not part of it. `SALT-NLP/spider_VALUE/data.zip` is a
+    public mirror of the canonical Yale Spider tarball that contains
+    `data/database/<db_id>/<db_id>.sqlite` for every Spider database.
+
+    Extracts to `<cache_dir>/spider_databases/data/database/` and returns that
+    path. Idempotent: re-uses the extracted dir if it already exists.
+    """
+    extract_root = cache_dir / "spider_databases"
+    db_dir = extract_root / "data" / "database"
+    if db_dir.exists() and any(db_dir.iterdir()):
+        log.info("Spider databases already extracted at %s", db_dir)
+        return db_dir
+
+    import zipfile
+
+    from huggingface_hub import hf_hub_download
+
+    log.info("downloading SALT-NLP/spider_VALUE/data.zip (one-time, ~95 MB) …")
+    zip_path = hf_hub_download(
+        repo_id="SALT-NLP/spider_VALUE",
+        filename="data.zip",
+        repo_type="dataset",
+        cache_dir=str(cache_dir),
+    )
+
+    log.info("extracting %s → %s", Path(zip_path).name, extract_root)
+    extract_root.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(zip_path) as zf:
+        members = [m for m in zf.namelist() if m.startswith("data/database/")]
+        zf.extractall(extract_root, members=members)
+
+    if not db_dir.exists():
+        msg = f"expected {db_dir} after extracting data.zip but it's missing"
+        raise SystemExit(msg)
+    return db_dir
+
+
 def _resolve_db_path(spider_db_dir: Path, db_id: str) -> Path:
     """Locate the SQLite file for a Spider DB.
 
@@ -162,14 +221,14 @@ def build(
     )
 
     if spider_db_dir is None:
-        # HF's `xlangai/spider` extracts SQLite files into the dataset cache,
-        # under `database/<db_id>/<db_id>.sqlite`. The exact path depends on
-        # the cache layout, so the user can override via --spider-db-dir.
-        msg = (
-            "Spider SQLite files location is required. Pass --spider-db-dir "
-            "pointing at the directory that contains <db_id>/<db_id>.sqlite."
-        )
-        raise SystemExit(msg)
+        # `xlangai/spider` is parquet-only — the per-DB SQLite files aren't
+        # part of `load_dataset`. Try the cache first (in case we extracted
+        # them before), then fall back to downloading from a mirror.
+        cache_root = hf_cache_dir or Path(".hf_cache")
+        spider_db_dir = _find_spider_db_dir(cache_root)
+        if spider_db_dir is None:
+            spider_db_dir = _ensure_spider_databases(cache_root)
+        log.info("Spider DB dir: %s", spider_db_dir)
 
     train_rows = [_row_to_spider(item) for item in ds["train"]]
     val_rows = [_row_to_spider(item) for item in ds["validation"]]
@@ -202,7 +261,8 @@ def main() -> None:
         "--spider-db-dir",
         type=Path,
         default=None,
-        help="Directory containing Spider per-DB SQLite files.",
+        help="Directory containing Spider per-DB SQLite files. "
+        "Optional — auto-discovered from --hf-cache-dir if omitted.",
     )
     parser.add_argument(
         "--hf-cache-dir",

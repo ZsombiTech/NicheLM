@@ -72,11 +72,23 @@ Six tables, foreign keys declared, indexed on every FK, 2-level category hierarc
 ## Quick start
 
 ```bash
-make install                 # uv sync --extra dev
-make seed                    # creates data/processed/ecom.sqlite
-make dataset                 # train.jsonl (Spider) + val.jsonl + test.jsonl (ecom)
-make qc                      # validates everything
-make baselines               # needs ANTHROPIC_API_KEY in .env
+# 1. Offline pipeline (laptop, ~1 min total)
+make install                                       # uv sync --extra dev
+make seed                                          # creates data/processed/ecom.sqlite
+make dataset-eval                                  # creates test.jsonl (500 rows)
+make inspect FILE=data/processed/test.jsonl        # eyeball the eval set
+make qc                                            # validates against the real DB
+
+# 2. Spider train set (needs `data` extra + network, ~10-15 min)
+uv sync --extra dev --extra data
+make dataset-train                                 # auto-discovers Spider in HF cache
+make inspect FILE=data/processed/train.jsonl SAMPLE=10
+make qc                                            # full QC including denylist + overlap
+
+# 3. Baselines (needs `eval` extra + ANTHROPIC_API_KEY in .env)
+uv sync --extra dev --extra data --extra eval
+make baselines-smoke                               # 5-prompt Claude smoke test (~$0.01)
+make baselines                                     # full 500 — includes local Llama (overnight on CPU)
 ```
 
 Windows / PowerShell — same targets via the bundled wrapper:
@@ -84,7 +96,10 @@ Windows / PowerShell — same targets via the bundled wrapper:
 ```powershell
 .\make.ps1 install
 .\make.ps1 seed
-.\make.ps1 ci                # = lint + test + fixture qc
+.\make.ps1 dataset-eval
+.\make.ps1 inspect -InspectFile data/processed/test.jsonl
+.\make.ps1 qc
+.\make.ps1 ci                                      # = lint + test + fixture qc
 ```
 
 The synthetic e-commerce test set is generated locally and **never overlaps** with Spider's training distribution by construction (see "Decisions" below).
@@ -156,6 +171,7 @@ Design choices made during scaffolding, with brief justifications:
 - **Spider as training corpus, fixed e-commerce as held-out eval** — the portfolio narrative ("trained on 200 DBs, beats Claude Haiku on a brand new schema") is more compelling than "fine-tuned on a synthetic single-domain set". Confirmed with the user.
 - **Schema-in-system-prompt format** — required to generalize across Spider's many DBs; carries no overhead at e-commerce eval time and lets the deployed server work against arbitrary user schemas.
 - **Denylist of e-commerce-shaped Spider DBs in training** — keeps the "domain it never saw" claim honest. Documented in `data/build_train_dataset.py::DENYLIST`.
+- **Spider DB source: `SALT-NLP/spider_VALUE/data.zip`** — the standard `xlangai/spider` HF dataset is parquet-only (text fields). `SALT-NLP/spider_VALUE/data.zip` is a public mirror of the canonical Yale tarball with all 166 per-DB SQLite files at `data/database/<db_id>/<db_id>.sqlite`. Auto-downloaded by `build_train_dataset.py` to `.hf_cache/spider_databases/` on first run.
 - **`max_seq_length = 4096`** — Spider DDL plus a long question can run past 2 k tokens; 4 k gives headroom without halving throughput.
 - **`sqlglot` for SQL normalization** — handles SQLite-flavored parsing for exact-match. Falls back to whitespace-lower if a query refuses to parse.
 - **Faker `en_US`, fixed seed 42** — full data reproducibility from a single flag.

@@ -97,3 +97,24 @@ def test_shape_registry_has_at_least_thirty() -> None:
     assert len(SHAPES) >= 30, f"need ≥30 shapes; found {len(SHAPES)}"
     names = {s.name for s in SHAPES}
     assert len(names) == len(SHAPES), "shape names must be unique"
+
+
+def test_inspect_runs_against_fixture(caplog: pytest.LogCaptureFixture) -> None:
+    from data.inspect import inspect
+
+    with caplog.at_level("INFO"):
+        inspect(EVAL, sample_n=2, seed=0)
+    text = caplog.text
+    assert "rows: 5" in text
+    assert "db_id=ecom" in text
+    assert "question length" in text
+
+
+def test_find_spider_db_dir_synthetic(tmp_path: Path) -> None:
+    from data.build_train_dataset import _find_spider_db_dir
+
+    fake = tmp_path / "extracted" / "abc123" / "database"
+    (fake / "concert_singer").mkdir(parents=True)
+    (fake / "concert_singer" / "concert_singer.sqlite").write_bytes(b"")
+    assert _find_spider_db_dir(tmp_path) == fake
+    assert _find_spider_db_dir(tmp_path / "empty") is None

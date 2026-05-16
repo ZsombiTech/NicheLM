@@ -156,12 +156,26 @@ def main() -> None:
     sft_cfg = SFTConfig(**{k: v for k, v in candidate_kwargs.items() if k in sft_params})
 
     # trl >= 0.18 ships SFTConfig with an `eos_token` field whose default is the
-    # literal placeholder '<EOS_TOKEN>'. SFTTrainer then validates that string
-    # against the tokenizer vocab and crashes. The field isn't exposed via
-    # __init__'s signature in every version, so the candidate-kwargs filter
-    # above may drop it — set it explicitly after construction.
-    if hasattr(sft_cfg, "eos_token"):
-        sft_cfg.eos_token = tokenizer.eos_token
+    # literal placeholder '<EOS_TOKEN>'. SFTTrainer validates that string
+    # against the tokenizer vocab and crashes. Force it to a real EOS token.
+    real_eos = tokenizer.eos_token
+    if not real_eos or real_eos == "<EOS_TOKEN>":
+        # Llama 3.2 Instruct's standard EOS; falls back here when Unsloth's
+        # "legacy tokenizer" mode leaves eos_token unset.
+        real_eos = "<|end_of_text|>"
+        tokenizer.eos_token = real_eos
+    log.info("eos_token resolved to %r (vocab size=%d)", real_eos, len(tokenizer.get_vocab()))
+    if real_eos not in tokenizer.get_vocab():
+        msg = f"resolved eos_token {real_eos!r} not in tokenizer vocab"
+        raise SystemExit(msg)
+
+    # Some SFTConfig versions freeze fields after init; use object.__setattr__
+    # as a fallback so we override the placeholder regardless.
+    try:
+        sft_cfg.eos_token = real_eos
+    except Exception:
+        object.__setattr__(sft_cfg, "eos_token", real_eos)
+    log.info("sft_cfg.eos_token after override = %r", getattr(sft_cfg, "eos_token", "<missing>"))
 
     # Belt-and-suspenders for trl versions that dropped max_seq_length from
     # SFTConfig: pin the tokenizer's max length so the trainer respects it.

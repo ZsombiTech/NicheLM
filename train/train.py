@@ -21,6 +21,18 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+# Env vars must be set BEFORE torch / unsloth / trl import. They paper over a
+# pile of incompatibilities between unsloth's patched model output, trl's
+# auxiliary metrics, and dill's multiprocess pickling.
+#   - UNSLOTH_RETURN_LOGITS: unsloth drops logits by default since 2024.11;
+#     trl's compute_loss needs them.
+#   - TORCH*_DISABLE: torch._dynamo.config is unpicklable and breaks
+#     datasets.map under multiprocess.
+os.environ.setdefault("UNSLOTH_RETURN_LOGITS", "1")
+os.environ.setdefault("TORCHDYNAMO_DISABLE", "1")
+os.environ.setdefault("TORCH_COMPILE_DISABLE", "1")
+os.environ.setdefault("TORCH_INDUCTOR_DISABLE", "1")
+
 import yaml
 
 from data._common import seed_all
